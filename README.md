@@ -1,55 +1,16 @@
-# ForgetLLM Unlearning Tool
+# ForgetLLM: A Practical Implementation of LLM Unlearning
 
-ForgetLLM Unlearning Tool is a FastAPI backend with a Vite, React, and TypeScript frontend for configuring and launching LLM unlearning runs. The application supports dataset upload, prompt-template formatting, model and GPU settings, training configuration preview, and training launch through the backend API.
+We present ForgetLLM, an open source interactive system for end-to-end Large Language Model (LLM) unlearning. ForgetLLM provides a unified interface for established unlearning methods, seed guided data-selection approaches, and evaluation benchmarks into a single workflow, reducing the engineering effort required to configure and compare unlearning pipelines. The system is designed for both model holders evaluating practical unlearning configurations and researchers for rapid testing.
 
-## Repository Layout
+## Run with Docker
 
-```text
-.
-├── main.py                  # FastAPI app entry point
-├── routes/                  # API route modules
-├── schemas.py               # Pydantic request and response schemas
-├── config/                  # Orchestrator config builder
-├── dataset/                 # Upload, validation, and preprocessing helpers
-├── gpu/                     # GPU inspection utilities
-├── model/                   # Model and adapter loading helpers
-├── unlearning/              # Core unlearning/training code
-├── front end/               # Vite React frontend
-└── docs/                    # Architecture and run documentation
-```
-
-Generated files are intentionally ignored by Git, including `.venv/`, `outputs/`, `uploaded_datasets/`, Python bytecode, and frontend build output.
-
-## Requirements
-
-For the complete Docker image, install Docker on the host. GPU execution also
-requires NVIDIA Container Toolkit and an NVIDIA driver compatible with the pinned
-CUDA 13 dependencies. No host Python, uv, or npm installation is needed.
-The first build downloads several GB of dependencies and requires access to the
-container, Python, and npm package registries.
-
-For the development workflow below:
-
-- Python environment with the backend dependencies installed.
-- Docker for the frontend development server.
-- A CUDA-capable environment if you want to run GPU training.
-
-This repository currently includes a local `.venv/` workflow. The checked-in `requirements.txt` contains environment-specific pins, so use the existing environment when available or recreate dependencies carefully for your machine.
-
-## Quick Start: Entire Application in Docker
-
-From the repository root, build the image:
+From the repository root, build the application image:
 
 ```bash
 docker build -t forgetllm-unlearning .
 ```
 
-The build creates a Python 3.12 virtual environment with `uv venv`, installs
-`requirements.txt` with `uv pip install`, and builds the frontend with `npm ci`
-and `npm run build`. The image runs Uvicorn and Nginx together, serving the
-frontend and API on one port.
-
-Run with GPU access and persistent storage:
+Run it with GPU access and persistent storage:
 
 ```bash
 docker run --rm --name forgetllm-unlearning \
@@ -61,297 +22,26 @@ docker run --rm --name forgetllm-unlearning \
   forgetllm-unlearning
 ```
 
-Open **http://localhost:5174**. API documentation is available at
-**http://localhost:5174/api/docs**. Omit `--gpus all` for UI/API-only use on a
-host without GPU access; the image still includes the CUDA dependencies.
-To choose another host port, change `5174:8080`; the container port stays `8080`.
-The browser uses same-origin `/api` requests, so no separate backend port or
-`VITE_API_URL` setting is needed.
+Open `http://localhost:5174`. The API documentation is available at `http://localhost:5174/api/docs`.
 
-Check the API:
+For UI/API-only use on a host without a GPU, omit `--gpus all`. For gated Hugging Face models or datasets, export `HF_TOKEN` and add `-e HF_TOKEN` before the image name.
 
-```bash
-curl -fsS http://localhost:5174/api/health
-```
+Press `Ctrl+C` to stop the application.
 
-Expected response: `{"message":"LLM training API is running"}`.
+## Run in Development
 
-Press `Ctrl+C` to stop both services. To stop from another terminal, run
-`docker stop forgetllm-unlearning`. The container is removed on exit; rerun the
-same command to start it again with the saved data. To run in the background,
-add `-d` to `docker run` and view logs with `docker logs -f forgetllm-unlearning`.
-
-### Persistent Data and Model Access
-
-The named volumes are created automatically and survive container removal:
-
-| Volume | Contents |
-| --- | --- |
-| `forgetllm-outputs` | Project database, training outputs, and evaluation results |
-| `forgetllm-datasets` | Uploaded datasets |
-| `forgetllm-hf-cache` | Downloaded Hugging Face models and datasets |
-
-To reuse this checkout's existing data, replace the first two `-v` arguments with:
-
-```bash
-  -v "$PWD/outputs:/app/outputs" \
-  -v "$PWD/uploaded_datasets:/app/uploaded_datasets" \
-```
-
-Run from the repository root. Any absolute paths saved in existing projects must
-also be accessible inside the container; mount local models at the paths used
-by the application.
-
-For gated Hugging Face models or datasets, export `HF_TOKEN` in your shell and
-add `-e HF_TOKEN` before the image name, or enter the token in the application's
-model settings. Local `.env` files, `.venv`, uploads, and outputs are excluded
-from the image. Rebuild after changing application code or requirements, then
-stop and recreate the container to use the updated image.
-
-See [Run Instructions](docs/RUN_INSTRUCTIONS.md) for additional configuration.
-
-## Development: Start Both Services
-
-The backend uses the repository's Python environment and the frontend runs in Docker. From the repository root, start both services with:
+From the repository root, start the backend and frontend together:
 
 ```bash
 ./start.sh
 ```
 
-The command builds the frontend image, then starts both development servers with their logs in the current terminal:
+Open the frontend at `http://localhost:5173`. The backend runs at `http://localhost:8000`.
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
+Press `Ctrl+C` to stop both services.
 
-Browser requests go directly to the backend's `/api` routes, with FastAPI CORS configured for the development frontend origin. Press `Ctrl+C` once to stop both services; the supervisor terminates the backend process group and stops the frontend container.
-
-The defaults can be overridden when needed:
+To override the default ports:
 
 ```bash
 BACKEND_PORT=8080 FRONTEND_PORT=5174 ./start.sh
 ```
-
-`PYTHON_BIN`, `BACKEND_HOST`, `BACKEND_PORT`, `FRONTEND_PORT`, `FRONTEND_IMAGE`, `FRONTEND_CONTAINER`, `VITE_API_URL`, `CORS_ALLOWED_ORIGINS`, and `API_PROXY_TARGET` are supported. When ports change, the default frontend API URL and CORS origins follow them automatically.
-
-## Development: Run Services Individually
-
-Running each service separately remains useful for focused development and debugging.
-
-### Backend
-
-Start the backend from the repository root:
-
-```bash
-.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Check it at `http://localhost:8000`:
-
-```bash
-curl -s http://127.0.0.1:8000/api/health
-```
-
-Expected response:
-
-```json
-{"message":"LLM training API is running"}
-```
-
-### Frontend
-
-The frontend is intended to run through Docker, so host-level `npm` is not required.
-
-Build the frontend image from the repository root:
-
-```bash
-docker build -t forgetllm-unlearning-frontend "front end"
-```
-
-Start the frontend container:
-
-```bash
-docker run -d \
-  --name forgetllm-unlearning-frontend-dev \
-  -p 5173:5173 \
-  -e VITE_API_URL=http://localhost:8000 \
-  forgetllm-unlearning-frontend
-```
-
-Open the app:
-
-```text
-http://localhost:5173
-```
-
-Start the backend before using the browser UI. The browser calls `http://localhost:8000/api` directly. If the backend is not running, actions such as dataset upload fail with a network error.
-
-### Frontend Docker Compose Option
-
-If Docker Compose is available:
-
-```bash
-cd "front end"
-docker compose up --build
-```
-
-Stop it with:
-
-```bash
-cd "front end"
-docker compose down
-```
-
-### Stop Individually Started Services
-
-Stop the frontend container:
-
-```bash
-docker rm -f forgetllm-unlearning-frontend-dev
-```
-
-If the backend is running in the foreground, stop it with `Ctrl+C`.
-
-If the backend was started in the background:
-
-```bash
-ps aux | grep "uvicorn main:app"
-kill <PID>
-```
-
-## Frontend Health Checks
-
-Check the frontend container:
-
-```bash
-docker ps --filter name=forgetllm-unlearning-frontend-dev
-docker logs --tail 80 forgetllm-unlearning-frontend-dev
-```
-
-Check the backend's canonical health route:
-
-```bash
-curl -s http://127.0.0.1:8000/api/health
-```
-
-Expected response:
-
-```json
-{"message":"LLM training API is running"}
-```
-
-## Dataset Format
-
-Uploaded datasets can be CSV, JSON, JSONL, or Parquet files. Each dataset must contain:
-
-- `question`
-- `answer`
-
-The prompt template must contain `{question}`. During upload, the backend applies the template to each question and writes processed Parquet files under `uploaded_datasets/`.
-
-## Main API Endpoints
-
-- `GET /api/health` - backend health check.
-- `POST /api/dataset/upload` - upload a required forget set, optional retain set, and prompt template.
-- `POST /api/config/build` - validate a training request and return the orchestrator config.
-- `POST /api/train/run` - build the config and run training in a dedicated child process.
-- `POST /api/train/stop` - terminate the active training process without stopping the API.
-- `POST /api/evaluation/start` - start pre/post evaluation as a background job.
-- `GET /api/evaluation/status/{job_id}` - poll evaluation progress and results.
-- `POST /api/evaluation/run` - blocking compatibility endpoint.
-
-The original unprefixed endpoints remain available as compatibility aliases, but new integrations should use `/api/*`. API documentation is available at `http://localhost:8000/api/docs`.
-
-Evaluation is a separate fifth frontend stage. It consumes the
-`orchestrator_config` and `training_result` returned by training and requires a
-sentence-transformers model name or local path. The original and unlearnt
-language models are scored and removed one at a time before the embedding model
-is loaded. The dashboard compares forget quality, model utility, perplexity,
-conditional probability, ROUGE-L, and retain-set cosine similarity. Both forget
-and retain datasets are required.
-
-The frontend uses these endpoints to provide the main workflow: upload datasets, preview processed rows, configure model and training settings, inspect the generated orchestrator JSON, launch training, and stop an active run.
-
-## Training Configuration Notes
-
-- Supported model loading methods are `full`, `lora`, and `adaptor`.
-- Supported unlearning methods are `grad_ascent`, `grad_diff`, `npo`, `dpo`, and `simnpo`,
-  selected with `unlearning_method` (defaults to `simnpo`). 
-- `retain_set_path` is required for `grad_diff`, `npo`, and `dpo`. `grad_ascent` has no
-  retain term and ignores one.
-- `dpo` needs a preferred answer per forget row: it uses an `alternate` column when the
-  forget dataset has one, otherwise it samples from `unlearning/data_helpers/idk.jsonl`.
-- Exactly one of `max_steps` or `epochs` must be set.
-- `context_length` must be a power of two.
-- `assistant_completions_only` is always `true`.
-- `lora_settings` is required for `lora` and only allowed for `lora`.
-- `adaptor_path` is required for `adaptor`.
-
-More detail is available in:
-
-- `docs/RUN_INSTRUCTIONS.md`
-- `docs/ARCHITECTURE.md`
-- `docs/FRONTEND.md`
-
-## Resources
-
-See `docs/resources.md` for product and UI references.
-
-## Plan
-
-See `docs/plan.md` for the project plan.
-
-## Project storage and cleanup
-
-The API creates `outputs/projects.sqlite3` automatically (Python's built-in SQLite;
-no additional dependency). The browser synchronizes project settings to this DB,
-including existing browser projects when the project list is opened. Selected
-`File` objects stay in IndexedDB; their filename/size/type metadata is stored in
-SQLite. Restoring a project on another browser restores settings and server paths,
-but files that were only selected locally must be selected again. Hugging Face
-access tokens are excluded from SQLite.
-
-New frontend requests include `project_id` and `project_name`. Storage uses a
-sanitized project name plus its ID to distinguish projects with identical names:
-
-- Uploads: `uploaded_datasets/<name>--<id>/datasets-<unique-id>/` (raw and processed files).
-- Models/checkpoints/logs: `outputs/runs/<name>--<id>/training-<unique-id>/`;
-  the final model or adapter is in the algorithm subdirectory.
-- Evaluation: `outputs/runs/<name>--<id>/evaluation-<unique-id>/`, including scores
-  and the project-named results JSONL.
-- Extraction: `outputs/gradients/<name>--<id>-<unique-id>/` and
-  `uploaded_datasets/raslik/<name>--<id>-<unique-id>/`.
-
-Each run has a new directory. Renaming a project changes names used for subsequent
-artifacts; earlier paths remain valid and are still owned by the same project ID.
-Old API clients may omit project identity; their outputs are not associated with a
-project, though API training runs still receive unique output directories.
-
-The `projects` table stores the current project snapshot. The `project_details`
-SQL view exposes project ID/name, dataset, extraction method, pre-unlearning model,
-adapter mode/path, algorithm, hyperparameters, and evaluation results as columns.
-`events` stores backend training configs/results/errors, dataset uploads,
-extraction configs/results, and evaluation configs/results, so completed backend
-results remain available even if the browser closes. `artifacts` records generated
-paths for cleanup. For example:
-
-```sql
-SELECT * FROM project_details;
-SELECT kind, details, created_at FROM events WHERE project_id = 'your-project-id';
-```
-
-`GET /api/projects` lists snapshots, `GET /api/projects/{id}` also returns history
-and artifact paths, and `PUT /api/projects/{id}` saves metadata.
-`DELETE /api/projects/{id}` removes registered files and DB metadata before the
-frontend deletes its local copy. Deletion is blocked during active uploads,
-training, extraction, or evaluation. Cleanup failures keep metadata for retry.
-Source models and adapters supplied as inputs are not registered for deletion.
-Deleted IDs are retained as tombstones to prevent stale browser saves from
-recreating a deleted project.
-
-**Existing files:** the old trainer reused `outputs/run/<algorithm>` and could
-have overwritten earlier models. Old raw uploads have random names with no
-project ownership record. Existing project snapshots are synchronized, but those
-unregistered legacy files are preserved: their ownership cannot be inferred
-reliably, and shared model directories must not be deleted as if they belonged to
-one project. The naming and automatic file cleanup above apply to newly generated
-project-owned artifacts; overwritten historical models cannot be recovered.
