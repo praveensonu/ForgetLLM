@@ -2,6 +2,8 @@
 
 We present ForgetLLM, an open source interactive system for end-to-end Large Language Model (LLM) unlearning. ForgetLLM provides a unified interface for established unlearning methods, seed guided data-selection approaches, and evaluation benchmarks into a single workflow, reducing the engineering effort required to configure and compare unlearning pipelines. The system is designed for both model holders evaluating practical unlearning configurations and researchers for rapid testing.
 
+Update: Added RMU Unlearning method.
+
 ## Run with Docker
 
 From the repository root, build the application image:

@@ -27,7 +27,7 @@ def convert_raw_data_to_model_qa(tokenizer, max_length,  question, answer):
     labels = list(input_ids) + [-100] * pad_length
 
     #change label to -100 for question tokens, including assistant header and end of header.
-    for i in range(num_question_tokens): labels[i] = -100
+    for i in range(min(num_question_tokens, len(labels))): labels[i] = -100
     assert len(pad_input_ids) == max_length
     assert len(labels) == max_length
     assert len(pad_attention_mask) == max_length

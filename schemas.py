@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import Optional, List, Dict, Any, Union, Literal
+import re
+from typing import Annotated, Optional, List, Dict, Any, Union, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from unlearning import methods as registry
@@ -17,6 +18,7 @@ class UnlearningMethod(str, Enum):
     npo = "npo"
     dpo = "dpo"
     simnpo = "simnpo"
+    rmu = "rmu"
 
 
 # methods whose loss has a retain term and therefore need a retain set
@@ -192,8 +194,32 @@ class MemoryHyperParams(BaseModel):
 
 
 class MethodHyperParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     beta: Optional[float] = Field(None, gt=0, allow_inf_nan=False)
     delta: Optional[float] = Field(None, allow_inf_nan=False)
+    layers_to_transform: Optional[List[Annotated[int, Field(strict=True, ge=0)]]] = Field(None, min_length=1)
+    module_regex: Optional[str] = Field(None, min_length=1)
+    trainable_params_regex: Optional[str] = Field(None, min_length=1)
+    steering_coeff: Optional[float] = Field(None, ge=0, allow_inf_nan=False)
+
+    @field_validator("layers_to_transform")
+    @classmethod
+    def validate_layers(cls, value):
+        if value is not None and len(set(value)) != len(value):
+            raise ValueError("layers_to_transform must not contain duplicates.")
+        return sorted(value) if value is not None else None
+
+    @field_validator("module_regex", "trainable_params_regex")
+    @classmethod
+    def validate_regex(cls, value):
+        if value is not None:
+            if not value.strip():
+                raise ValueError("Regular expressions must not be empty.")
+            try:
+                re.compile(value)
+            except re.error as error:
+                raise ValueError(f"Invalid regular expression: {error}") from error
+        return value
 
 
 class HyperParamsConfig(BaseModel):

@@ -41,7 +41,7 @@ class GpuSelectionTests(unittest.TestCase):
             self.assertEqual(os.environ["CUDA_VISIBLE_DEVICES"], "7")
 
     def test_reference_training_worker_selects_first_gpu_before_runner(self):
-        for method in ("dpo", "npo"):
+        for method in ("dpo", "npo", "rmu"):
             with self.subTest(method=method), patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "7"}):
                 outcome = TrainingProcessManager(runner=report_visible_gpus).run({
                     "gpu": {"gpu_ids": [6, 2]}, "unlearning": {"method": method}
@@ -77,7 +77,7 @@ class GpuSelectionTests(unittest.TestCase):
     @patch("eval_orchestrator._collect_model_outputs_phase")
     def test_single_gpu_does_not_reload_for_generation(self, collect):
         _collect_model_outputs(gpu_ids=[6])
-        collect.assert_called_once_with(phase="both")
+        collect.assert_called_once_with(gpu_ids=[6], phase="both")
 
     def test_evaluation_phases_do_not_mix_scoring_and_generation(self):
         import pandas as pd

@@ -12,7 +12,7 @@ from unlearning.npo.trainer import NPOTrainer
 
 class UnlearningDeviceTests(unittest.TestCase):
     def test_reference_methods_use_first_selected_gpu(self):
-        for method in ('dpo', 'npo'):
+        for method in ('dpo', 'npo', 'rmu'):
             for gpu in ({'gpu_ids': [6, 2]}, {'gpu_id': 6}):
                 with self.subTest(method=method, gpu=gpu), patch.dict(os.environ, {}, clear=True):
                     configure_training_devices({'gpu': gpu, 'unlearning': {'method': method}})
@@ -28,7 +28,7 @@ class UnlearningDeviceTests(unittest.TestCase):
                 self.assertEqual(os.environ['UL_MODEL_DEVICE_MAP'], 'balanced')
 
     def test_reference_methods_reject_distributed_launch(self):
-        for method in ('dpo', 'npo'):
+        for method in ('dpo', 'npo', 'rmu'):
             with self.subTest(method=method), patch.dict(os.environ, {'WORLD_SIZE': '2'}):
                 with self.assertRaisesRegex(ValueError, 'single training process'):
                     configure_training_devices({'gpu': {'gpu_ids': [6, 2]}, 'unlearning': {'method': method}})

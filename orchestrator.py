@@ -92,6 +92,8 @@ def build_unlearning_run(method, forget_df, retain_df, tokenizer, context_length
     from unlearning.ga.trainer import GradAscentTrainer
     from unlearning.gd.trainer import GradDiffTrainer
     from unlearning.npo.trainer import NPOForgetOnlyTrainer, NPOTrainer
+    from unlearning.rmu.trainer import RMUForgetOnlyTrainer, RMUTrainer
+    from unlearning.rmu.config import resolve_rmu_params
     from unlearning.snpo.trainer import (
         SimNPOForgetOnlyTrainer,
         SimNPOForgetRetainTrainer,
@@ -108,9 +110,11 @@ def build_unlearning_run(method, forget_df, retain_df, tokenizer, context_length
 
     trainer_args = dict(UNLEARNING_METHOD_ARGS[method], gamma=gamma, alpha=alpha)
     for key, value in (method_hyperparams or {}).items():
-        if key not in {"beta", "delta"} or key not in trainer_args:
+        if key not in trainer_args or key in {"gamma", "alpha", "retain_loss_type"}:
             raise ValueError(f"Unsupported hyperparameter '{key}' for {method}.")
         trainer_args[key] = value
+    if method == "rmu":
+        trainer_args.update(resolve_rmu_params(method_hyperparams))
     dataset_kwargs = {
         "tokenizer": tokenizer,
         "max_length": context_length,
@@ -132,6 +136,7 @@ def build_unlearning_run(method, forget_df, retain_df, tokenizer, context_length
             "simnpo": SimNPOForgetOnlyTrainer,
             "npo": NPOForgetOnlyTrainer,
             "dpo": DPOForgetOnlyTrainer,
+            "rmu": RMUForgetOnlyTrainer,
         }[method]
         trainer_args.pop("retain_loss_type", None)
     elif method == "dpo":
@@ -149,6 +154,7 @@ def build_unlearning_run(method, forget_df, retain_df, tokenizer, context_length
             "grad_diff": GradDiffTrainer,
             "npo": NPOTrainer,
             "simnpo": SimNPOForgetRetainTrainer,
+            "rmu": RMUTrainer,
         }[method]
 
     run_type = f"{method}_{'forget_only' if forget_only else 'forget_retain'}"
@@ -174,9 +180,9 @@ def configure_training_devices(api_config: Dict[str, Any]) -> None:
 
     method = api_config.get("unlearning", {}).get("method", DEFAULT_UNLEARNING_METHOD)
     gpu_ids = selected_gpu_ids(api_config["gpu"])
-    single_gpu = method in {"dpo", "npo"}
+    single_gpu = method in {"dpo", "npo", "rmu"}
     if single_gpu and int(os.environ.get("WORLD_SIZE", "1")) > 1:
-        raise ValueError("DPO and NPO require a single training process on one GPU.")
+        raise ValueError("DPO, NPO and RMU require a single training process on one GPU.")
     set_cuda_visible_devices(gpu_ids[:1] if single_gpu else gpu_ids)
     # The first selected physical GPU is remapped to logical cuda:0.
     os.environ["UL_MODEL_DEVICE_MAP"] = "cuda:0" if single_gpu else "balanced"
@@ -205,6 +211,13 @@ def run_orchestrator(api_config: Dict[str, Any]) -> Dict[str, Any]:
         adaptor_path=model_cfg.get("adaptor_path"),
         gpu_id=0,  # because CUDA_VISIBLE_DEVICES remaps selected GPU to cuda:0
         hf_key=api_config["model"].get("hf_key"),
+        **({
+            "target_modules": (hp.get("lora_settings") or {}).get("target_modules"),
+            "layers_to_transform": (
+                hp.get("method", {}).get("layers_to_transform", UNLEARNING_METHOD_ARGS["rmu"]["layers_to_transform"])
+                if method == "rmu" else None
+            ),
+        } if model_cfg["method"] == "lora" else {}),
     )
 
     model.train()
@@ -250,6 +263,7 @@ def run_orchestrator(api_config: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     trainer = trainer_cls(**trainer_args, **trainer_kwargs)
+    trainable_params, total_params = get_trainable_parameter_counts(model)
 
     result = trainer.train()
 
@@ -260,7 +274,12 @@ def run_orchestrator(api_config: Dict[str, Any]) -> Dict[str, Any]:
         run_type,
     )
 
-    trainer.save_model(output_dir)
+    if merged and model_cfg["method"] == "lora":
+        # The new adapter was trained on a base containing a previous adapter.
+        # An adapter-only artifact would lose that base when evaluation reloads it.
+        model.merge_and_unload().save_pretrained(output_dir)
+    else:
+        trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
 
     import torch

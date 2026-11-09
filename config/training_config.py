@@ -1,8 +1,12 @@
 from schemas import FinalTrainingConfigRequest
 from unlearning.methods import UNLEARNING_METHOD_ARGS
+from unlearning.rmu.config import resolve_rmu_params
 
 
 def build_orchestrator_config(request: FinalTrainingConfigRequest) -> dict:
+    method_params = request.hyperparams.method.model_dump(exclude_none=True)
+    if request.unlearning_method.value == "rmu":
+        method_params = resolve_rmu_params(method_params)
     return {
         "project_id": request.project_id,
         "project_name": request.project_name,
@@ -27,7 +31,7 @@ def build_orchestrator_config(request: FinalTrainingConfigRequest) -> dict:
             "method": {
                 **{key: value for key, value in UNLEARNING_METHOD_ARGS[request.unlearning_method.value].items()
                    if key in {"beta", "delta"}},
-                **request.hyperparams.method.model_dump(exclude_none=True),
+                **method_params,
             },
             "general": {
                 "gamma": request.hyperparams.general.gamma,

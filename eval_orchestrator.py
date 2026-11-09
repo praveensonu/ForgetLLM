@@ -68,7 +68,9 @@ def _load_pre_unlearning_model(model_config: Dict[str, Any]):
     from model.model_loader import load_model_by_method
 
     model, tokenizer, _ = load_model_by_method(
-        method=model_config["method"],
+        # LoRA evaluation starts from the original base (plus an optional merged
+        # input adapter), without allocating a fresh untrained LoRA adapter.
+        method="full" if model_config["method"] == "lora" else model_config["method"],
         base_model_path=model_config["model_name"],
         adaptor_path=model_config.get("adaptor_path"),
         gpu_id=0,

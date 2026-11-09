@@ -1,4 +1,5 @@
 import type { DatasetUploadResponse, FinalTrainingConfigRequest, Project } from "../types";
+import { parseRmuLayers, rmuTrainableParamsRegex } from "./rmu";
 
 function optionalText(value: string) {
   const trimmed = value.trim();
@@ -10,6 +11,10 @@ export function buildTrainingPayload(
   dataset: DatasetUploadResponse
 ): FinalTrainingConfigRequest {
   const h = project.hyperparameters;
+  const rmuLayers = h.unlearningMethod === "rmu" ? parseRmuLayers(h.rmuLayersToTransform) : null;
+  if (h.unlearningMethod === "rmu" && !rmuLayers) {
+    throw new Error("RMU layers must be distinct, non-negative integers separated by commas.");
+  }
 
   return {
     project_id: project.id,
@@ -24,7 +29,14 @@ export function buildTrainingPayload(
     forget_set_path: dataset.forget_set_path,
     retain_set_path: dataset.retain_set_path,
     hyperparams: {
-      method: h.unlearningMethod === "simnpo"
+      method: h.unlearningMethod === "rmu" && rmuLayers
+        ? {
+            layers_to_transform: rmuLayers,
+            module_regex: h.rmuModuleRegex.trim(),
+            trainable_params_regex: rmuTrainableParamsRegex(rmuLayers),
+            steering_coeff: Number(h.rmuSteeringCoeff),
+          }
+        : h.unlearningMethod === "simnpo"
         ? { beta: Number(h.simnpoBeta), delta: Number(h.simnpoDelta) }
         : h.unlearningMethod === "dpo"
           ? { beta: Number(h.dpoBeta) }

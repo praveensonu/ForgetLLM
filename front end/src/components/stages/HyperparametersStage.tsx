@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getUnlearningMethods } from "../../api";
 import { fallbackUnlearningMethods } from "../../defaults";
 import { useProject } from "../../state/ProjectContext";
 import type { StepMode, UnlearningMethod, UnlearningMethodInfo } from "../../types";
 import { FieldLabel, fieldHelp } from "../ui/HelpTip";
+import { defaultRmuModuleRegex, parseRmuLayers, rmuTrainableParamsRegex } from "../../utils/rmu";
 
 const contextOptions = [512, 1024, 2048, 4096, 8192];
 
@@ -34,6 +35,19 @@ export default function HyperparametersStage() {
   const selected = methods.find((method) => method.value === h.unlearningMethod);
   const hasRetainSet = Boolean(project.data.preparedRetainFile ?? project.data.retainFile);
   const retainMissing = Boolean(selected?.requires_retain) && !hasRetainSet;
+  const rmuLayers = parseRmuLayers(h.rmuLayersToTransform);
+  const lastValidRmuLayers = useRef(rmuLayers);
+
+  function changeRmuLayers(value: string) {
+    const nextLayers = parseRmuLayers(value);
+    const previousLayers = lastValidRmuLayers.current;
+    const followsLayers = previousLayers && h.rmuModuleRegex === defaultRmuModuleRegex(previousLayers);
+    if (nextLayers) lastValidRmuLayers.current = nextLayers;
+    updateHyperparameters({
+      rmuLayersToTransform: value,
+      ...(nextLayers && followsLayers ? { rmuModuleRegex: defaultRmuModuleRegex(nextLayers) } : {}),
+    });
+  }
 
   function changeMode(mode: StepMode) {
     if (mode === "epochs") {
@@ -97,6 +111,35 @@ export default function HyperparametersStage() {
               <input type="number" min={0} step="any" value={h[betaKey]}
                 onChange={(event) => updateHyperparameters({ [betaKey]: event.target.value })} />
               <small>Must be greater than zero.</small>
+            </label>
+          </div>
+        )}
+
+        {h.unlearningMethod === "rmu" && (
+          <div className="field-grid two">
+            <label className="field">
+              <span>Layers to transform</span>
+              <input value={h.rmuLayersToTransform} onChange={(event) => changeRmuLayers(event.target.value)}
+                aria-invalid={rmuLayers === null} placeholder="22, 23, 24, 25, 26, 27, 28" />
+              <small>Comma-separated, zero-based layer indices. Also selects layers for new LoRA adapters.</small>
+              {rmuLayers === null && <small role="alert">Enter distinct, non-negative integers separated by commas.</small>}
+            </label>
+            <label className="field">
+              <span>Steering coefficient</span>
+              <input type="number" min={0} step="any" value={h.rmuSteeringCoeff}
+                onChange={(event) => updateHyperparameters({ rmuSteeringCoeff: event.target.value })} />
+              <small>Magnitude of the fixed random activation target.</small>
+            </label>
+            <label className="field">
+              <span>Module regex</span>
+              <input value={h.rmuModuleRegex}
+                onChange={(event) => updateHyperparameters({ rmuModuleRegex: event.target.value })} />
+              <small>Must match exactly one activation module. Defaults to the highest selected layer.</small>
+            </label>
+            <label className="field">
+              <span>Trainable parameters regex</span>
+              <input readOnly value={rmuLayers ? rmuTrainableParamsRegex(rmuLayers) : ""} />
+              <small>Generated from the layers above. Existing frozen base weights stay frozen when training adapters.</small>
             </label>
           </div>
         )}

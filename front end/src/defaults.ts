@@ -22,7 +22,8 @@ export const fallbackUnlearningMethods: UnlearningMethodInfo[] = [
   { value: "grad_diff", label: "Gradient Difference", requires_retain: true },
   { value: "npo", label: "NPO", requires_retain: false },
   { value: "dpo", label: "DPO", requires_retain: false },
-  { value: "simnpo", label: "SimNPO", requires_retain: false }
+  { value: "simnpo", label: "SimNPO", requires_retain: false },
+  { value: "rmu", label: "RMU", requires_retain: false }
 ];
 
 export const unlearningMethods: UnlearningMethod[] = fallbackUnlearningMethods.map(
@@ -106,6 +107,9 @@ export function createDefaultProject(name = "Unnamed project"): Project {
       npoBeta: "0.1",
       simnpoBeta: "4.5",
       simnpoDelta: "0.0",
+      rmuLayersToTransform: "22, 23, 24, 25, 26, 27, 28",
+      rmuModuleRegex: String.raw`.*layers\.28$`,
+      rmuSteeringCoeff: "20.0",
       forgettingStrength: "1.0",
       retentionStrength: "1.0",
       weightDecay: 0.01,

@@ -1,5 +1,6 @@
 import { retainRequiredMethods } from "../defaults";
 import type { Project, ProjectStage } from "../types";
+import { parseRmuLayers } from "./rmu";
 
 const stageOrder: ProjectStage[] = ["gpu", "data", "model", "hyperparameters", "running", "evaluation"];
 function projectStageOrder(project: Project) { return project.data.sourceMode === "extract" ? stageOrder.filter((stage) => stage !== "model") : stageOrder; }
@@ -45,7 +46,12 @@ export function isHyperparametersValid(project: Project) {
     : h.unlearningMethod === "npo" ? h.npoBeta
       : h.unlearningMethod === "simnpo" ? h.simnpoBeta : null;
   const methodOk = (beta === null || (beta.trim() !== "" && Number.isFinite(Number(beta)) && Number(beta) > 0))
-    && (h.unlearningMethod !== "simnpo" || (h.simnpoDelta.trim() !== "" && Number.isFinite(Number(h.simnpoDelta))));
+    && (h.unlearningMethod !== "simnpo" || (h.simnpoDelta.trim() !== "" && Number.isFinite(Number(h.simnpoDelta))))
+    && (h.unlearningMethod !== "rmu" || (
+      parseRmuLayers(h.rmuLayersToTransform) !== null && h.rmuModuleRegex.trim() !== ""
+      && h.rmuSteeringCoeff.trim() !== "" && Number.isFinite(Number(h.rmuSteeringCoeff))
+      && Number(h.rmuSteeringCoeff) >= 0
+    ));
   const scheduleOk = h.stepMode === "max_steps" ? h.maxSteps > 0 : h.epochs > 0;
   const lr = Number(h.learningRate);
   const learningRateOk = Number.isFinite(lr) && lr > 0;

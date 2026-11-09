@@ -1,5 +1,5 @@
 export type Method = "full" | "lora" | "adaptor";
-export type UnlearningMethod = "grad_ascent" | "grad_diff" | "npo" | "dpo" | "simnpo";
+export type UnlearningMethod = "grad_ascent" | "grad_diff" | "npo" | "dpo" | "simnpo" | "rmu";
 
 export type UnlearningMethodInfo = {
   value: UnlearningMethod;
@@ -91,7 +91,14 @@ export type JobCancelResponse = {
 };
 
 export type Hyperparams = {
-  method: { beta?: number; delta?: number };
+  method: {
+    beta?: number;
+    delta?: number;
+    layers_to_transform?: number[];
+    module_regex?: string;
+    trainable_params_regex?: string;
+    steering_coeff?: number;
+  };
   general: {
     max_steps: number | null;
     epochs: number | null;
@@ -300,6 +307,9 @@ export type ProjectHyperparametersConfig = {
   npoBeta: string;
   simnpoBeta: string;
   simnpoDelta: string;
+  rmuLayersToTransform: string;
+  rmuModuleRegex: string;
+  rmuSteeringCoeff: string;
   forgettingStrength: string;
   retentionStrength: string;
   weightDecay: number;

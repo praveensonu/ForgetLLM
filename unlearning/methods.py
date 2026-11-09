@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, NamedTuple
 
+from unlearning.rmu.config import resolve_rmu_params
+
 
 class UnlearningMethodSpec(NamedTuple):
     label: str
@@ -23,6 +25,12 @@ class UnlearningMethodSpec(NamedTuple):
 
 
 UNLEARNING_METHODS: Dict[str, UnlearningMethodSpec] = {
+    "rmu": UnlearningMethodSpec(
+        label="RMU",
+        trainer_args=resolve_rmu_params(),
+        requires_retain=False,
+        forget_only=False,
+    ),
     "grad_ascent": UnlearningMethodSpec(
         label="Gradient Ascent",
         trainer_args={},
